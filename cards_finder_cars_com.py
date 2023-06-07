@@ -42,21 +42,39 @@ def get_card_url_list(url, site_url=SOURCE_ID, headers=DEFAULT_HEADER):
     return url_list
 
 
+def init_db_connection(con, sql_script_path):
+    result_code = 0
+
+    if sql_script_path is not None:
+        cur = con.cursor()
+        with open(sql_script_path) as init_db_file:
+            for sql_stmt in init_db_file.read().split(";"):
+                try:
+                    cur.execute(sql_stmt)
+                except:
+                    result_code = -1
+
+    return result_code
+
+
 def main():
     with open("config.json") as config_file:
         configs = json.load(config_file)
 
     con = pymysql.connect(**configs["audit_db"])
 
+    init_db_connection(con, configs.get("init_db_script"))
+
     with con:
         cur = con.cursor()
 
         cur.execute(
             f"""
-                insert into process_log(process_desc, user, host)         
+                insert into process_log(process_desc, user, host, connection_id)         
                 select '{PROCESS_DESC}', 
                        user, 
-                       host
+                       host,
+                       connection_id()
                 from information_schema.processlist
                 where id = connection_id();
             """
@@ -82,7 +100,7 @@ def main():
                         break
 
                     cur.execute(f"insert into ad_groups(group_url, process_log_id) values('{group_url}', {process_log_id});")
-                    cur.execute("select last_insert_id()")
+                    cur.execute("select last_insert_id();")
                     ad_group_id = cur.fetchone()[0]
 
                     for card_url in card_url_list:
@@ -115,7 +133,6 @@ def main():
                 where process_log_id = {process_log_id};
             """
         )
-        con.commit()
 
 
 if __name__ == "__main__":

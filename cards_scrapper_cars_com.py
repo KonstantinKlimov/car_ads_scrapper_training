@@ -183,19 +183,39 @@ def get_parsed_card(url, debug=0, headers=DEFAULT_HEADER):
     return card_dict
 
 
+def init_db_connection(con, sql_script_path):
+    result_code = 0
+
+    if sql_script_path is not None:
+        cur = con.cursor()
+        with open(sql_script_path) as init_db_file:
+            for sql_stmt in init_db_file.read().split(";"):
+                try:
+                    cur.execute(sql_stmt)
+                except:
+                    result_code = -1
+
+    return result_code
+
+
 def main():
     with open("config.json") as config_file:
         configs = json.load(config_file)
 
     con = pymysql.connect(**configs["audit_db"])
 
+    init_db_connection(con, configs.get("init_db_script"))
+
     with con:
         cur = con.cursor()
 
         cur.execute(
             f"""
-                insert into process_log(process_desc, user, host)         
-                select '{PROCESS_DESC}', user, host
+                insert into process_log(process_desc, user, host, connection_id)         
+                select '{PROCESS_DESC}', 
+                       user, 
+                       host,
+                       connection_id()
                 from information_schema.processlist
                 where id = connection_id();
             """
@@ -289,17 +309,31 @@ def main():
                     ad_status = 2
                     card = json.dumps(parsed_card).replace("\\xa0", " ").replace("\\u2009", " ").replace("'", "''")
 
-                sql_string = f"""
-                        update ads
-                           set ad_status = {ad_status},
-                               change_status_date = current_timestamp,
-                               change_status_process_log_id = {process_log_id},
-                               card = '{card}'
-                        where ads_id = {ads_id};
-                    """
-                cur.execute(sql_string)
+                try:
+                    sql_string = f"""
+                            update ads
+                               set ad_status = {ad_status},
+                                   change_status_date = current_timestamp,
+                                   change_status_process_log_id = {process_log_id},
+                                   card = '{card}'
+                            where ads_id = {ads_id};
+                        """
+                    cur.execute(sql_string)
 
-                print(f"{time.strftime('%X', time.gmtime(time.time() - start_time))}, {ad_status}, num: {num}, ads_id: {ads_id}, year: {parsed_card['description'][:4]}: {url}")
+                    print(f"{time.strftime('%X', time.gmtime(time.time() - start_time))}, {ad_status}, num: {num}, ads_id: {ads_id}, year: {parsed_card['description'][:4]}, card size: {len(card)}, {url}")
+                except:
+                    ad_status = -1
+
+                    sql_string = f"""
+                            update ads
+                               set ad_status = {ad_status},
+                                   change_status_date = current_timestamp,
+                                   change_status_process_log_id = {process_log_id}                                   
+                            where ads_id = {ads_id};
+                        """
+                    cur.execute(sql_string)
+
+                    print(f"{time.strftime('%X', time.gmtime(time.time() - start_time))}, {ad_status}, num: {num}, ads_id: {ads_id}, year: -, card size: {len(card)}, {url}")
 
         cur.execute(
             f"""
@@ -308,7 +342,6 @@ def main():
                 where process_log_id = {process_log_id};
             """
         )
-        con.commit()
 
 
 if __name__ == "__main__":

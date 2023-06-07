@@ -33,6 +33,7 @@ create table if not exists process_log
     process_desc        varchar(255) not null,
     `user`              varchar(255) not null,
     host                varchar(255) not null,
+    connection_id       int,
     start_date          datetime not null default current_timestamp,
     end_date            datetime
 ) character set utf8mb3;
