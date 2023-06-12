@@ -1,0 +1,1 @@
+mysqldump -utimoti -penter1 car_ads_training_db > car_ads_training_db.sql

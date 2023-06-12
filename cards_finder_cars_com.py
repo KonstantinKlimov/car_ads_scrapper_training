@@ -100,7 +100,7 @@ def main():
                         break
 
                     cur.execute(f"insert into ad_groups(group_url, process_log_id) values('{group_url}', {process_log_id});")
-                    cur.execute("select last_insert_id();")
+                    cur.execute("select last_insert_id() as ad_group_id;")
                     ad_group_id = cur.fetchone()[0]
 
                     for card_url in card_url_list:

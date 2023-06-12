@@ -5,7 +5,6 @@ import requests
 import time
 import json
 
-
 start_time = time.time()
 
 headers = requests.utils.default_headers()
@@ -36,7 +35,7 @@ def get_parsed_card(url, debug=0, headers=DEFAULT_HEADER):
         card = soup.find("section", class_="listing-overview")
         # print(card,"\n")
         if card is None:
-            return {} # {} - empty result
+            return {}  # {} - empty result
 
         card_gallery = card.find("div", class_="modal-slides-and-controls")
         card_dict["gallery"] = []
@@ -51,7 +50,8 @@ def get_parsed_card(url, debug=0, headers=DEFAULT_HEADER):
         basic_section = basic_content.find("section", class_="sds-page-section basics-section")
         fancy_description_list = basic_section.find("dl", class_="fancy-description-list")
         dt_elements = [elem.text.strip() for elem in fancy_description_list.find_all("dt")]
-        dd_elements = [elem.get_text(separator='|', strip=True).split("|")[0] for elem in fancy_description_list.find_all("dd")]
+        dd_elements = [elem.get_text(separator='|', strip=True).split("|")[0] for elem in
+                       fancy_description_list.find_all("dd")]
         for key, value in zip(dt_elements, dd_elements):
             card_dict[key.lower()] = value
 
@@ -86,7 +86,8 @@ def get_parsed_card(url, debug=0, headers=DEFAULT_HEADER):
             feature_content = basic_content.find("section", class_="sds-page-section features-section")
             fancy_description_list = feature_content.find("dl", class_="fancy-description-list")
             dt_elements = [elem.text.strip() for elem in fancy_description_list.find_all("dt")]
-            dd_elements = [elem.get_text(separator='|', strip=True).split("|") for elem in fancy_description_list.find_all("dd")]
+            dd_elements = [elem.get_text(separator='|', strip=True).replace('"', "''").replace("'", "''").split("|")
+                           for elem in fancy_description_list.find_all("dd")]
             for category, values in zip(dt_elements, dd_elements):
                 section_dict = {}
                 section_dict["category"] = category
@@ -97,7 +98,7 @@ def get_parsed_card(url, debug=0, headers=DEFAULT_HEADER):
             all_features = basic_content.find("div", class_="all-features-text-container")
             section_dict = {}
             section_dict["category"] = "features"
-            section_dict["items"] = all_features.get_text("|", True).split("|")
+            section_dict["items"] = all_features.get_text("|", True).replace('"', "''").replace("'", "''").split("|")
             card_dict["options"].append(section_dict)
         except:
             pass
@@ -117,7 +118,7 @@ def get_parsed_card(url, debug=0, headers=DEFAULT_HEADER):
 
         card_comment = basic_content.find("div", class_="sellers-notes")
         try:
-            card_dict["comment"] = card_comment.get_text(separator="|", strip=True).replace("\n", "|")
+            card_dict["comment"] = card_comment.get_text(separator="|", strip=True).replace("\n", "|").replace('"', "''").replace("'", "''")
         except:
             card_dict["comment"] = ""
 
@@ -157,7 +158,7 @@ def get_parsed_card(url, debug=0, headers=DEFAULT_HEADER):
                                    card_dict["engine"].replace(",", " ") + ", " + \
                                    card_dict["fuel type"].replace(",", " ") + \
                                    ((" (" + mpg + " mpg)") if mpg else "") + ", " + \
-                                   card_dict["mileage"].replace(",", " ") +" | " + \
+                                   card_dict["mileage"].replace(",", " ") + " | " + \
                                    card_dict["bodystyle"].replace(",", " ") + ", " + \
                                    card_dict["drivetrain"].replace(",", " ") + ", " + \
                                    card_dict["exterior color"].replace(",", " ")
@@ -261,9 +262,8 @@ def main():
                 else:
                     break
 
-
             cur.execute(
-                    f"""
+                f"""
                         with cte_random_group
                         as
                         (
@@ -284,7 +284,7 @@ def main():
                         where a.ad_status = 0 or 
                               (ad_status = 2 and timestampdiff(hour, change_status_date, current_timestamp) > {MIN_RESCRAP_TIME});                    
                     """
-                )
+            )
             if cur.rowcount == 0:
                 break
 
@@ -296,7 +296,7 @@ def main():
                 url_parts = url.split("?")
 
                 parsed_card = {}
-                ad_status = 1
+                ad_status = None
                 try:
                     if len(url_parts) == 1:
                         parsed_card = get_parsed_card(url)
@@ -304,12 +304,20 @@ def main():
                     # error when parsing the card (url)
                     ad_status = -1
 
+                card = '{}'
                 if parsed_card != {}:
                     # successfully parsed the card (url)
                     ad_status = 2
-                    card = json.dumps(parsed_card).replace("\\xa0", " ").replace("\\u2009", " ").replace("'", "''")
+
+                    card = json.dumps(parsed_card) \
+                        .replace("\\xa0", " ") \
+                        .replace("\\u2009", " ") \
+                        .replace("\\u2013", "-") \
+                        .replace("\\u2026|", "")
 
                 try:
+                    print(f"{time.strftime('%X', time.gmtime(time.time() - start_time))}, {ad_status}, num: {num}, ads_id: {ads_id}, year: {parsed_card['description'][:4]}, card size: {len(card)}, {url}")
+
                     sql_string = f"""
                             update ads
                                set ad_status = {ad_status},
@@ -319,10 +327,13 @@ def main():
                             where ads_id = {ads_id};
                         """
                     cur.execute(sql_string)
-
-                    print(f"{time.strftime('%X', time.gmtime(time.time() - start_time))}, {ad_status}, num: {num}, ads_id: {ads_id}, year: {parsed_card['description'][:4]}, card size: {len(card)}, {url}")
                 except:
-                    ad_status = -1
+                    if card == '{}':
+                        ad_status = 1
+                    else:
+                        ad_status = -1
+
+                    print(f"{time.strftime('%X', time.gmtime(time.time() - start_time))}, {ad_status}, num: {num}, ads_id: {ads_id}, year: -, card size: {len(card)}, {url}")
 
                     sql_string = f"""
                             update ads
@@ -333,7 +344,6 @@ def main():
                         """
                     cur.execute(sql_string)
 
-                    print(f"{time.strftime('%X', time.gmtime(time.time() - start_time))}, {ad_status}, num: {num}, ads_id: {ads_id}, year: -, card size: {len(card)}, {url}")
 
         cur.execute(
             f"""
