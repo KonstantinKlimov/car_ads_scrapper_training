@@ -20,7 +20,7 @@ headers.update({
 
 DEFAULT_HEADER = headers
 SOURCE_ID = "https://www.cars.com"
-PROCESS_DESC = "cards_scrapper_cars_com.py"
+PROCESS_DESC = "datafix_cards_scrapper_reload_improperly_formed_cards.py"
 MIN_RESCRAP_TIME = 24
 
 
@@ -226,124 +226,78 @@ def main():
         process_log_id = cur.fetchone()[0]
 
         num = 0
-        while True:
-            # get new portion of not yet scrapped urls having the same ad_group_id
-            cur.execute(
-                f"""
-                    with cte_cars_com_ad_group_ids
-                    as
-                    (
-                        select distinct ad_group_id
-                        from ads 
-                        where (
-                                ad_status = 0 or 
-                                (ad_status = 2 and timestampdiff(hour, change_status_date, current_timestamp) > {MIN_RESCRAP_TIME})
-                              ) and source_id = '{SOURCE_ID}'
-                    )
-                    select floor(rand() * (select max(ad_group_id) from cte_cars_com_ad_group_ids)) as random_ad_group_id;
-                """
-            )
 
-            random_ad_group_id = cur.fetchone()[0]
-            if random_ad_group_id is None:
-                # check if there is what to do
-                cur.execute(
-                    f"""
-                        select *
-                        from ads 
-                        where (
-                                ad_status = 0 or 
-                                (ad_status = 2 and timestampdiff(hour, change_status_date, current_timestamp) > {MIN_RESCRAP_TIME})
-                              ) and source_id = '{SOURCE_ID}';
+        print(f"{time.strftime('%X', time.gmtime(time.time() - start_time))} find what to do...")
+        cur.execute(
+            """
+                select a.ads_id, concat(a.source_id, a.card_url) as url, g.group_url
+                from ads a
+                join ad_groups g on a.ad_group_id = g.ad_group_id
+                where JSON_VALID(card) = 0;
+            """
+        )
+
+        print(f"{time.strftime('%X', time.gmtime(time.time() - start_time))} improperly formed jsons (cards): {cur.rowcount}\n")
+
+        max_num = cur.rowcount
+        records_fetched = cur.fetchall()
+
+        for ads_id, url, group_url in records_fetched:
+            num += 1
+
+            url_parts = url.split("?")
+
+            parsed_card = {}
+            ad_status = None
+            try:
+                if len(url_parts) == 1:
+                    parsed_card = get_parsed_card(url)
+            except:
+                # error when parsing the card (url)
+                ad_status = -1
+
+            card = '{}'
+            if parsed_card != {}:
+                # successfully parsed the card (url)
+                ad_status = 2
+
+                card = json.dumps(parsed_card) \
+                    .replace("\\xa0", " ") \
+                    .replace("\\u2009", " ") \
+                    .replace("\\u2013", "-") \
+                    .replace("\\u2026", "")
+
+            try:
+                print(f"{time.strftime('%X', time.gmtime(time.time() - start_time))}, {ad_status}, num: {num}/{max_num}, ads_id: {ads_id}, year: {parsed_card['description'][:4]}, card size: {len(card)}, {url}")
+
+                sql_string = f"""
+                        update ads
+                           set ad_status = {ad_status},
+                               change_status_date = current_timestamp,
+                               change_status_process_log_id = {process_log_id},
+                               card = '{card}'
+                        where ads_id = {ads_id};
                     """
-                )
-                if cur.rowcount > 0:
-                    continue
+                cur.execute(sql_string)
+            except:
+                if card == '{}':
+                    ad_status = 1
                 else:
-                    break
-
-            cur.execute(
-                f"""
-                        with cte_random_group
-                        as
-                        (
-                            select ad_group_id as ad_group_id
-                            from ads
-                            where (
-                                    ad_status = 0 or 
-                                    (ad_status = 2 and timestampdiff(hour, change_status_date, current_timestamp) > {MIN_RESCRAP_TIME})
-                                  ) and 
-                                  source_id = '{SOURCE_ID}' and
-                                  ad_group_id >= {random_ad_group_id}
-                            limit 1
-                        )
-                        select a.ads_id, concat(a.source_id, a.card_url) as url, g.group_url 
-                        from ads a
-                        join ad_groups g on a.ad_group_id = g.ad_group_id
-                        join cte_random_group rg on g.ad_group_id = rg.ad_group_id    
-                        where a.ad_status = 0 or 
-                              (ad_status = 2 and timestampdiff(hour, change_status_date, current_timestamp) > {MIN_RESCRAP_TIME});                    
-                    """
-            )
-            if cur.rowcount == 0:
-                break
-
-            records_fetched = cur.fetchall()
-
-            for ads_id, url, group_url in records_fetched:
-                num += 1
-
-                url_parts = url.split("?")
-
-                parsed_card = {}
-                ad_status = None
-                try:
-                    if len(url_parts) == 1:
-                        parsed_card = get_parsed_card(url)
-                except:
-                    # error when parsing the card (url)
                     ad_status = -1
 
-                card = '{}'
-                if parsed_card != {}:
-                    # successfully parsed the card (url)
-                    ad_status = 2
+                print(f"{time.strftime('%X', time.gmtime(time.time() - start_time))}, {ad_status}, num: {num}/{max_num}, ads_id: {ads_id}, year: -, card size: {len(card)}, {url}")
 
-                    card = json.dumps(parsed_card) \
-                        .replace("\\xa0", " ") \
-                        .replace("\\u2009", " ") \
-                        .replace("\\u2013", "-") \
-                        .replace("\\u2026", "")
+                sql_string = f"""
+                        update ads
+                           set ad_status = {ad_status},
+                               change_status_date = current_timestamp,
+                               change_status_process_log_id = {process_log_id},
+                               card = null                                   
+                        where ads_id = {ads_id};
+                    """
+                cur.execute(sql_string)
 
-                try:
-                    print(f"{time.strftime('%X', time.gmtime(time.time() - start_time))}, {ad_status}, num: {num}, ads_id: {ads_id}, year: {parsed_card['description'][:4]}, card size: {len(card)}, {url}")
-
-                    sql_string = f"""
-                            update ads
-                               set ad_status = {ad_status},
-                                   change_status_date = current_timestamp,
-                                   change_status_process_log_id = {process_log_id},
-                                   card = '{card}'
-                            where ads_id = {ads_id};
-                        """
-                    cur.execute(sql_string)
-                except:
-                    if card == '{}':
-                        ad_status = 1
-                    else:
-                        ad_status = -1
-
-                    print(f"{time.strftime('%X', time.gmtime(time.time() - start_time))}, {ad_status}, num: {num}, ads_id: {ads_id}, year: -, card size: {len(card)}, {url}")
-
-                    sql_string = f"""
-                            update ads
-                               set ad_status = {ad_status},
-                                   change_status_date = current_timestamp,
-                                   change_status_process_log_id = {process_log_id}                                   
-                            where ads_id = {ads_id};
-                        """
-                    cur.execute(sql_string)
-
+        print(f"\n{time.strftime('%X', time.gmtime(time.time() - start_time))} done!")
 
         cur.execute(
             f"""
