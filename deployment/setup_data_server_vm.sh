@@ -74,6 +74,14 @@ if [ ! -f /soft/car_ads_scrapper_training/data-server-vm-configured ]; then
     echo "/mnt/disk-for-data/swap/swapfile none swap sw 0 0" | sudo tee -a /etc/fstab
     echo
 
+    echo "------------------------------------------------------------"
+    echo $(date "+%Y-%m-%d %H:%M:%S") "Cloning github repository"
+    echo
+    sudo mkdir /soft
+    sudo git clone https://github.com/timoti1/car_ads_scrapper_training /soft/car_ads_scrapper_training
+    echo
+    echo
+
     # set the rdbms up
     echo "------------------------------------------------------------"
     echo $(date "+%Y-%m-%d %H:%M:%S") "Creating database (mysql) objects"
@@ -133,14 +141,6 @@ if [ ! -f /soft/car_ads_scrapper_training/data-server-vm-configured ]; then
     sudo ufw allow 2049
     sudo ufw allow 3306
     sudo exportfs -a
-    echo
-
-    echo "------------------------------------------------------------"
-    echo $(date "+%Y-%m-%d %H:%M:%S") "Cloning github repository"
-    echo
-    sudo mkdir /soft
-    sudo git clone https://github.com/timoti1/car_ads_scrapper_training /soft/car_ads_scrapper_training
-    echo
     echo
 
     echo "------------------------------------------------------------"

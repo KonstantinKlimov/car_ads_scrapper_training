@@ -82,46 +82,77 @@ def main():
         cur.execute("select last_insert_id() as process_log_id;")
         process_log_id = cur.fetchone()[0]
 
-        num = 0
         curr_year = int(time.strftime("%Y", time.gmtime()))
+        page_size = 20
 
+        num_ads_inserted = 0
+        num_searches = 0
+        num_combinations = (curr_year - 1900) * 50 * 500
         for year in range(curr_year, 1900, -1):
             for price_usd in range(0, 500001, 10000):
-                for page_num in range(1, 500):
-                    num += 1
+                for page_num in range(1, 501):
+                    num_searches += 1
 
-                    group_url = f"{SOURCE_ID}/shopping/results/?list_price_max={price_usd + 9999}&list_price_min={price_usd}&maximum_distance=all&page_size=20&page={page_num}&stock_type=used&year_max={year}&year_min={year}&zip=60606"
-
-                    print(f"\ntime: {time.strftime('%X', time.gmtime(time.time() - start_time))}, num: {num}, url: {group_url}")
+                    group_url = f"{SOURCE_ID}/shopping/results/?list_price_max={price_usd + 9999}&list_price_min={price_usd}&maximum_distance=all&page_size={page_size}&page={page_num}&stock_type=used&year_max={year}&year_min={year}&zip=60606"
 
                     card_url_list = get_card_url_list(group_url)
                     if card_url_list == []:
                         print(f"time: {time.strftime('%X', time.gmtime(time.time() - start_time))}, no cards found")
+                        num_searches += 500 - page_num
                         break
 
-                    cur.execute(f"insert into ad_groups(group_url, process_log_id) values('{group_url}', {process_log_id});")
+                    cur.execute(
+                        f"""
+                            insert into ad_groups(price_min, page_size, year, page_num, process_log_id)
+                            values({price_usd}, {page_size}, {year}, {page_num}, {process_log_id});
+                        """
+                    )
                     cur.execute("select last_insert_id() as ad_group_id;")
                     ad_group_id = cur.fetchone()[0]
 
                     for card_url in card_url_list:
                         cur.execute(
                             f"""
-                                insert into ads(source_id, card_url, ad_group_id, insert_process_log_id)
+                                insert into ads(source_id, card_url)
                                 with cte_new_card
                                 as
                                 ( 
                                     select '{card_url[len(SOURCE_ID):]}' as card_url
                                 )
                                 select '{SOURCE_ID}' as source_id, 
-                                       card_url, 
-                                       {ad_group_id} as ad_group_id, 
-                                       {process_log_id} as insert_process_log_id
+                                       card_url
                                 from cte_new_card
                                 where card_url not in (select card_url from ads where source_id='{SOURCE_ID}');
                             """
                         )
 
+                        if cur.rowcount == 0:
+                            continue
+
+                        num_ads_inserted += cur.rowcount
+
+                        # make more detailed copy of the record in ads_archive table. link it with ads using ads_id
+                        cur.execute(
+                            f"""
+                                insert into ads_archive(ads_id, source_id, card_url, ad_group_id, process_log_id)
+                                with cte_new_card
+                                as
+                                ( 
+                                    select '{card_url[len(SOURCE_ID):]}' as card_url
+                                )
+                                select last_insert_id() as ads_id,
+                                       '{SOURCE_ID}' as source_id, 
+                                       card_url,
+                                       {ad_group_id} as ad_group_id, 
+                                       {process_log_id} as process_log_id
+                                from cte_new_card;
+                            """
+                        )
+
+                    print(f"\ntime: {time.strftime('%X', time.gmtime(time.time() - start_time))}, ads inserted: {num_ads_inserted}, combination #: {num_searches}, progress: {round(num_searches/num_combinations*100, 2):5}%, search url: {group_url}")
+
                     if len(card_url_list) < 20:
+                        num_searches += 500 - page_num
                         break
 
         print(f"\nend time (GMT): {time.strftime('%X', time.gmtime())}")

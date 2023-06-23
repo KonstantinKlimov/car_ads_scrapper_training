@@ -225,23 +225,40 @@ def main():
         cur.execute("select last_insert_id() as process_log_id;")
         process_log_id = cur.fetchone()[0]
 
-        num = 0
+        num_processed = 0
         while True:
             # get new portion of not yet scrapped urls having the same ad_group_id
-            cur.execute(
-                f"""
-                    with cte_cars_com_ad_group_ids
+            sql_string = f"""
+                    with cte_last_ad_versions
+                    as
+                    (
+                        select *
+                        from (
+                            select ads_id, 
+                                   source_id,
+                                   ad_group_id, 
+                                   ad_status, 
+                                   modify_date,
+                                   row_number() over(partition by ads_id order by modify_date desc) as rn
+                            from ads_archive
+                        ) q
+                        where rn = 1
+                    ),                    
+                    cte_ad_group_ids
                     as
                     (
                         select distinct ad_group_id
-                        from ads 
+                        from cte_last_ad_versions 
                         where (
                                 ad_status = 0 or 
-                                (ad_status = 2 and timestampdiff(hour, change_status_date, current_timestamp) > {MIN_RESCRAP_TIME})
+                                (ad_status = 2 and timestampdiff(hour, modify_date, current_timestamp) > {MIN_RESCRAP_TIME})
                               ) and source_id = '{SOURCE_ID}'
                     )
-                    select floor(rand() * (select max(ad_group_id) from cte_cars_com_ad_group_ids)) as random_ad_group_id;
+                    select floor(rand() * (select max(ad_group_id) from cte_ad_group_ids)) as random_ad_group_id;
                 """
+
+            cur.execute(
+                sql_string
             )
 
             random_ad_group_id = cur.fetchone()[0]
@@ -250,10 +267,10 @@ def main():
                 cur.execute(
                     f"""
                         select *
-                        from ads 
+                        from ads_archive 
                         where (
                                 ad_status = 0 or 
-                                (ad_status = 2 and timestampdiff(hour, change_status_date, current_timestamp) > {MIN_RESCRAP_TIME})
+                                (ad_status = 2 and timestampdiff(hour, modify_date, current_timestamp) > {MIN_RESCRAP_TIME})
                               ) and source_id = '{SOURCE_ID}';
                     """
                 )
@@ -268,21 +285,28 @@ def main():
                         as
                         (
                             select ad_group_id as ad_group_id
-                            from ads
+                            from ads_archive
                             where (
                                     ad_status = 0 or 
-                                    (ad_status = 2 and timestampdiff(hour, change_status_date, current_timestamp) > {MIN_RESCRAP_TIME})
+                                    (ad_status = 2 and timestampdiff(hour, modify_date, current_timestamp) > {MIN_RESCRAP_TIME})
                                   ) and 
                                   source_id = '{SOURCE_ID}' and
                                   ad_group_id >= {random_ad_group_id}
                             limit 1
                         )
-                        select a.ads_id, concat(a.source_id, a.card_url) as url, g.group_url 
-                        from ads a
+                        select a.ads_id, 
+                               a.source_id,
+                               a.card_url, 
+                               a.ad_group_id,
+                               g.price_min, 
+                               g.page_size, 
+                               g.year, 
+                               g.page_num 
+                        from ads_archive a
                         join ad_groups g on a.ad_group_id = g.ad_group_id
                         join cte_random_group rg on g.ad_group_id = rg.ad_group_id    
                         where a.ad_status = 0 or 
-                              (ad_status = 2 and timestampdiff(hour, change_status_date, current_timestamp) > {MIN_RESCRAP_TIME});                    
+                              (ad_status = 2 and timestampdiff(hour, modify_date, current_timestamp) > {MIN_RESCRAP_TIME});                    
                     """
             )
             if cur.rowcount == 0:
@@ -290,9 +314,10 @@ def main():
 
             records_fetched = cur.fetchall()
 
-            for ads_id, url, group_url in records_fetched:
-                num += 1
+            for ads_id, source_id, card_url, ad_group_id, price_min, page_size, year, page_num in records_fetched:
+                num_processed += 1
 
+                url = source_id + card_url
                 url_parts = url.split("?")
 
                 parsed_card = {}
@@ -316,34 +341,36 @@ def main():
                         .replace("\\u2026", "")
 
                 try:
-                    print(f"{time.strftime('%X', time.gmtime(time.time() - start_time))}, {ad_status}, num: {num}, ads_id: {ads_id}, year: {parsed_card['description'][:4]}, card size: {len(card)}, {url}")
+                    print(f"{time.strftime('%X', time.gmtime(time.time() - start_time))}, {ad_status}, ads processed: {num_processed}, ads_id: {ads_id}, year: {parsed_card['description'][:4]}, card size: {len(card)}, {url}")
 
-                    sql_string = f"""
-                            update ads
-                               set ad_status = {ad_status},
-                                   change_status_date = current_timestamp,
-                                   change_status_process_log_id = {process_log_id},
-                                   card = '{card}'
-                            where ads_id = {ads_id};
+                    cur.execute(
+                        f"""
+                            insert into ads_archive (ads_id, source_id, card_url, ad_group_id, process_log_id, ad_status, card)
+                            values ({ads_id}, '{source_id}', '{card_url}', {ad_group_id}, {process_log_id}, {ad_status}, '{card}');
                         """
-                    cur.execute(sql_string)
+                    )
                 except:
                     if card == '{}':
                         ad_status = 1
                     else:
                         ad_status = -1
 
-                    print(f"{time.strftime('%X', time.gmtime(time.time() - start_time))}, {ad_status}, num: {num}, ads_id: {ads_id}, year: -, card size: {len(card)}, {url}")
+                    print(f"{time.strftime('%X', time.gmtime(time.time() - start_time))}, {ad_status}, ads processed: {num_processed}, ads_id: {ads_id}, year: -, card size: {len(card)}, {url}")
 
-                    sql_string = f"""
-                            update ads
-                               set ad_status = {ad_status},
-                                   change_status_date = current_timestamp,
-                                   change_status_process_log_id = {process_log_id}                                   
-                            where ads_id = {ads_id};
+                    cur.execute(
+                        f"""
+                            insert into ads_archive (ads_id, source_id, card_url, ad_group_id, process_log_id, ad_status)
+                            values ({ads_id}, '{source_id}', '{card_url}', {ad_group_id}, {process_log_id}, {ad_status});
                         """
-                    cur.execute(sql_string)
+                    )
 
+                if ad_status != 2:
+                    # delete a problematic ad
+                    cur.execute(
+                        f"""
+                            delete from ads where ads_id = {ads_id};
+                        """
+                    )
 
         cur.execute(
             f"""
