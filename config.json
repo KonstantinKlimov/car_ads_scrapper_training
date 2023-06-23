@@ -1,10 +1,11 @@
 {
   "audit_db": {
-      "host": "127.0.0.1",
+      "host": "34.171.129.5",
       "user": "timoti",
       "password": "enter1",
       "database": "car_ads_training_db",
       "autocommit": 1
   },
-  "init_db_script": "deployment/mysql_setup_query_logs.sql"
+  "finder_init_db_script_": "deployment/mysql_setup_query_logs.sql",
+  "scrapper_init_db_script_": "deployment/mysql_setup_query_logs.sql"
 }

@@ -63,7 +63,7 @@ def main():
 
     con = pymysql.connect(**configs["audit_db"])
 
-    init_db_connection(con, configs.get("init_db_script"))
+    init_db_connection(con, configs.get("finder_init_db_script"))
 
     with con:
         cur = con.cursor()

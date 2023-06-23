@@ -1,4 +1,4 @@
-use car_ads_training_db;
+-- use car_ads_training_db;
 
 insert into process_log(process_desc, user, host, connection_id)
 select 'datafix_move_fields_from_ads_to_ads_archive.sql',
