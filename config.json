@@ -1,11 +1,22 @@
 {
   "audit_db": {
-      "host": "34.171.129.5",
+      "host": "localhost",
       "user": "timoti",
       "password": "enter1",
       "database": "car_ads_training_db",
       "autocommit": 1
   },
-  "finder_init_db_script_": "deployment/mysql_setup_query_logs.sql",
-  "scrapper_init_db_script_": "deployment/mysql_setup_query_logs.sql"
+
+  "mssql_audit_db": {
+      "host": "localhost:1433",
+      "user": "timoti",
+      "password": "enter1",
+      "database": "car_ads_training_db"
+  },
+
+  "mysql_finder_init_db_script_": "deployment/mysql_setup_query_logs.sql",
+  "mysql_scrapper_init_db_script_": "deployment/mysql_setup_query_logs.sql",
+
+  "mssql_finder_init_db_script_": "deployment/mssql_setup_query_logs.sql",
+  "mssql_scrapper_init_db_script_": "deployment/mssql_setup_query_logs.sql"
 }
