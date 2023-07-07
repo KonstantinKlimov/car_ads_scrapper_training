@@ -1,11 +1,22 @@
 {
   "audit_db": {
-      "host": "localhost",
+      "host": "127.0.0.1",
       "user": "timoti",
       "password": "enter1",
       "database": "car_ads_training_db",
       "autocommit": 1
   },
+
+  "simulator_db": {
+      "host": "127.0.0.1",
+      "user": "timoti",
+      "password": "enter1",
+      "database": "simulator_db",
+      "autocommit": 1
+  },
+
+  "init_db_script_": "deployment/mysql_setup_query_logs.sql",
+  "simulator_init_db": "deployment/mysql_setup_simulator.sql"
 
   "mssql_audit_db": {
       "host": "localhost:1433",

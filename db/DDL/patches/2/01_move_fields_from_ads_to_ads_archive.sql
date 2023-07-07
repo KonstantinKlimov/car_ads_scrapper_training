@@ -48,7 +48,7 @@ select
     ads.insert_date,
     null as card
 from ads
-left join ads_archive on ads.ads_id = ads_archive.ads_id and ads_archive.ad_status = ads.ad_status
+left join ads_archive on ads.ads_id = ads_archive.ads_id and ads_archive.modify_date = ads.insert_date
 where ads_archive.ads_id is null;
 
 -- copy scrapper's records to the archive table
@@ -73,7 +73,7 @@ select
     ads.change_status_date,
     ads.card
 from ads
-left join ads_archive on ads.ads_id = ads_archive.ads_id and ads_archive.ad_status = ads.ad_status
+left join ads_archive on ads.ads_id = ads_archive.ads_id and ads_archive.modify_date = ads.change_status_date
 where ads.ad_status <> 0 and
       JSON_VALID(ads.card) = 1 and
       ads_archive.ads_id is null;
@@ -110,7 +110,7 @@ select
     ads.change_status_date,
     ads.card
 from ads
-left join ads_bak on ads.ads_id = ads_bak.ads_id and ifnull(ads.change_status_date, ads.insert_date) = ifnull(ads_bak.change_status_date, ads_bak.insert_date)
+left join ads_bak on ads.ads_id = ads_bak.ads_id -- and ifnull(ads.change_status_date, ads.insert_date) = ifnull(ads_bak.change_status_date, ads_bak.insert_date)
 where ads_bak.ads_id is null;
 
 -- remove card field
@@ -121,7 +121,7 @@ alter table ads drop insert_date;
 alter table ads drop change_status_process_log_id;
 alter table ads drop ad_status;
 alter table ads drop change_status_date;
-alter table ads drop card;                             -- takes time, because table's pages (leaf level) are rebuild (actually the table itself is recreated)
+alter table ads drop card;                             -- takes time, because table's pages (leaf level) are rebuilt (actually the table itself is recreated)
 
 update process_log
   set end_date = current_timestamp()
