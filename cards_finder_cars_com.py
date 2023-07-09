@@ -151,7 +151,7 @@ def main():
 
                     print(f"\ntime: {time.strftime('%X', time.gmtime(time.time() - start_time))}, ads inserted: {num_ads_inserted}, combination #: {num_searches}, progress: {round(num_searches/num_combinations*100, 2):5}%, search url: {group_url}")
 
-                    if len(card_url_list) < 20:
+                    if len(card_url_list) < page_size:
                         num_searches += 500 - page_num
                         break
 

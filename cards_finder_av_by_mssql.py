@@ -10,13 +10,11 @@ start_time = time.time()
 
 headers = requests.utils.default_headers()
 headers.update({
-    'Accept-Encoding': 'gzip, deflate, sdch',
-    'Accept-Language': 'en-US,en;q=0.8',
-    'Upgrade-Insecure-Requests': '1',
-    'User-Agent': 'TGTG/22.2.1 Dalvik/2.1.0 (Linux; U; Android 9; SM-G955F Build/PPR1.180610.011)',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-    'Cache-Control': 'max-age=0',
-    'Connection': 'keep-alive'
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.103 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9",
+    "Upgrade-Insecure-Requests": "1",
+    "Cache-Control": "max-age=0",
+    "Connection": "keep-alive"
 })
 
 DEFAULT_HEADER = headers
@@ -30,6 +28,16 @@ def get_card_url_list(url, site_url=SOURCE_ID, headers=DEFAULT_HEADER):
     page = requests.get(url, headers=headers)
     if page.status_code == 200:
         soup = BeautifulSoup(page.text, "html.parser")
+
+        listing_top = soup.find_all("div", class_="listing-top")
+        try:
+            for item in listing_top:
+                item_href = item.find("a", class_="listing-top__title-link")["href"]
+                url_list.append(site_url + item_href)
+        except:
+            pass
+
+
 
         listing_items = soup.find_all("div", class_="listing-item")
         try:
@@ -80,9 +88,10 @@ def main():
         cur.execute("select scope_identity() as process_log_id;")
         process_log_id = cur.fetchone()[0]
 
-        num = 0
         curr_year = int(time.strftime("%Y", time.gmtime()))
+        page_size = 25
 
+        num = 0
         for year in range(curr_year, 1900, -1):
             for price_usd in range(0, 500001, 10000):
                 for page_num in range(1, 501):
@@ -90,14 +99,14 @@ def main():
 
                     group_url = f"{SOURCE_ID}/filter?year[min]={year}&year[max]={year}&price_usd[min]={price_usd}&price_usd[max]={price_usd + 9999}&page={page_num}"
 
-                    print(f"\ntime: {time.strftime('%X', time.gmtime(time.time() - start_time))}, num: {num}, url: {group_url}")
-
                     card_url_list = get_card_url_list(group_url)
+
+                    print(f"time: {time.strftime('%X', time.gmtime(time.time() - start_time))}, num: {num}, num cards: {len(card_url_list)}, url: {group_url}")
+
                     if card_url_list == []:
-                        print(f"time: {time.strftime('%X', time.gmtime(time.time() - start_time))}, no cards found")
                         break
 
-                    cur.execute(f"insert into ad_groups(group_url, process_log_id) values('{group_url}', {process_log_id});")
+                    cur.execute(f"insert into ad_groups(group_url, process_log_id) values(N'{group_url}', {process_log_id});")
                     cur.execute("select scope_identity() as ad_group_id;")
                     ad_group_id = cur.fetchone()[0]
 
@@ -119,7 +128,7 @@ def main():
                             """
                         )
 
-                    if len(card_url_list) < 20:
+                    if len(card_url_list) < page_size:
                         break
 
 

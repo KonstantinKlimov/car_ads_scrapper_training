@@ -80,24 +80,26 @@ def main():
         cur.execute("select scope_identity() as process_log_id;")
         process_log_id = cur.fetchone()[0]
 
-        num = 0
         curr_year = int(time.strftime("%Y", time.gmtime()))
+        page_size = 20
 
+        num = 0
         for year in range(curr_year, 1900, -1):
             for price_usd in range(0, 500001, 10000):
                 for page_num in range(1, 500):
                     num += 1
 
-                    group_url = f"{SOURCE_ID}/shopping/results/?list_price_max={price_usd + 9999}&list_price_min={price_usd}&maximum_distance=all&page_size=20&page={page_num}&stock_type=used&year_max={year}&year_min={year}&zip=60606"
-
-                    print(f"\ntime: {time.strftime('%X', time.gmtime(time.time() - start_time))}, num: {num}, url: {group_url}")
+                    group_url = f"{SOURCE_ID}/shopping/results/?list_price_max={price_usd + 9999}&list_price_min={price_usd}&maximum_distance=all&page_size={page_size}&page={page_num}&stock_type=used&year_max={year}&year_min={year}&zip=60606"
 
                     card_url_list = get_card_url_list(group_url)
+
+                    print(f"time: {time.strftime('%X', time.gmtime(time.time() - start_time))}, num: {num}, num cards: {len(card_url_list)}, url: {group_url}")
+
                     if card_url_list == []:
                         print(f"time: {time.strftime('%X', time.gmtime(time.time() - start_time))}, no cards found")
                         break
 
-                    cur.execute(f"insert into ad_groups(group_url, process_log_id) values('{group_url}', {process_log_id});")
+                    cur.execute(f"insert into ad_groups(group_url, process_log_id) values(N'{group_url}', {process_log_id});")
                     cur.execute("select scope_identity() as ad_group_id;")
                     ad_group_id = cur.fetchone()[0]
 
@@ -107,19 +109,19 @@ def main():
                                 with cte_new_card
                                 as
                                 ( 
-                                    select '{card_url[len(SOURCE_ID):]}' as card_url
+                                    select N'{card_url[len(SOURCE_ID):]}' as card_url
                                 )
                                 insert into ads(source_id, card_url, ad_group_id, insert_process_log_id)
-                                select '{SOURCE_ID}' as source_id, 
+                                select N'{SOURCE_ID}' as source_id, 
                                        card_url, 
                                        {ad_group_id} as ad_group_id, 
                                        {process_log_id} as insert_process_log_id
                                 from cte_new_card
-                                where card_url not in (select card_url from ads where source_id='{SOURCE_ID}');
+                                where card_url not in (select card_url from ads where source_id=N'{SOURCE_ID}');
                             """
                         )
 
-                    if len(card_url_list) < 20:
+                    if len(card_url_list) < page_size:
                         break
 
         print(f"\nend time (GMT): {time.strftime('%X', time.gmtime())}")

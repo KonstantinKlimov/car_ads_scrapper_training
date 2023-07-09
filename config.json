@@ -16,7 +16,7 @@
   },
 
   "init_db_script_": "deployment/mysql_setup_query_logs.sql",
-  "simulator_init_db": "deployment/mysql_setup_simulator.sql"
+  "simulator_init_db": "deployment/mysql_setup_simulator.sql",
 
   "mssql_audit_db": {
       "host": "localhost:1433",

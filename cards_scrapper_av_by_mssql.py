@@ -8,15 +8,13 @@ import json
 start_time = time.time()
 
 headers = requests.utils.default_headers()
-# headers.update({
-#     "Accept-Encoding": "gzip, deflate, sdch",
-#     "Accept-Language": "en-US,en;q=0.8",
-#     "Upgrade-Insecure-Requests": "1",
-#     "User-Agent": "TGTG/22.2.1 Dalvik/2.1.0 (Linux; U; Android 9; SM-G955F Build/PPR1.180610.011)",
-#     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-#     "Cache-Control": "max-age=0",
-#     "Connection": "keep-alive"
-# })
+headers.update({
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.103 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9",
+    "Upgrade-Insecure-Requests": "1",
+    "Cache-Control": "max-age=0",
+    "Connection": "keep-alive"
+})
 
 DEFAULT_HEADER = headers
 SOURCE_ID = "https://cars.av.by"
@@ -103,7 +101,7 @@ def get_parsed_card(url, debug=0, headers=DEFAULT_HEADER):
         # if debug:
         #     print(f"card_comment: {card_comment.text}")
         try:
-            card_dict["comment"] = card_comment.get_text(separator="|", strip=True).replace("\n", "|")
+            card_dict["comment"] = card_comment.get_text(separator='|', strip=True).replace("\n", " ").replace("\r", " ")
         except:
             card_dict["comment"] = ""
 
@@ -210,6 +208,32 @@ def init_db_connection(con, sql_script_path):
     return result_code
 
 
+def json_corrected(json):
+    if not (isinstance(json, dict) or isinstance(json, list)):
+        result = str(json) \
+                    .replace("\xa0", " ") \
+                    .replace("\u2009", " ") \
+                    .replace("\u2013", "-") \
+                    .replace("\u2026", "") \
+                    .replace('"', '``') \
+                    .replace("'", '`') \
+                    .replace("\n", "|")
+
+    if isinstance(json, dict):
+        result = {}
+
+        for key, value in json.items():
+            result[key] = json_corrected(value)
+
+    if isinstance(json, list):
+        result = []
+
+        for el in json:
+            result += [json_corrected(el)]
+
+    return result
+
+
 def main():
     with open("config.json") as config_file:
         configs = json.load(config_file)
@@ -223,9 +247,9 @@ def main():
 
         cur.execute(
             f"""
-                insert into process_log(process_desc, [user], host, connection_id)         
-                select N'{PROCESS_DESC}', 
-                       SYSTEM_USER, 
+                insert into process_log(process_desc, [user], host, connection_id)
+                select N'{PROCESS_DESC}',
+                       SYSTEM_USER,
                        HOST_NAME(),
                        @@spid;
             """
@@ -313,17 +337,18 @@ def main():
                     # error when parsing the card (url)
                     ad_status = -1
 
-                card = '{}'
+                card = {}
                 if parsed_card != {}:
                     # successfully parsed the card (url)
                     ad_status = 2
 
-                    card = f"{parsed_card}" \
-                        .replace("\\xa0", " ") \
-                        .replace("\\u2009", " ") \
-                        .replace("\\u2013", "-") \
-                        .replace("\\u2026", "") \
-                        .replace("'", '"')
+                    card = json_corrected(parsed_card)
+
+                    card = f"{card}" \
+                        .replace("'", '"') \
+                        .replace("`", "'") \
+                        .replace(": False", ": 0") \
+                        .replace(": True", ": 1")
 
                 try:
                     print(f"{time.strftime('%X', time.gmtime(time.time() - start_time))}, {ad_status}, num: {num}, ads_id: {ads_id}, year: {parsed_card['description'][:4]}, card size: {len(card)}, {url}")
