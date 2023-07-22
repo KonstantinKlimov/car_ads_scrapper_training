@@ -14,10 +14,10 @@ create table if not exists ad_groups
 (
     ad_group_id                 int not null primary key auto_increment,
 
-    price_min                   int not null default -1;
-    page_size                   tinyint not null default -1;
-    year                        smallint not null default -1;
-    page_num                    smallint not null default -1;
+    price_min                   int not null default -1,
+    page_size                   tinyint not null default -1,
+    year                        smallint not null default -1,
+    page_num                    smallint not null default -1,
 
     process_log_id              int not null,
     insert_date                 datetime not null default current_timestamp
