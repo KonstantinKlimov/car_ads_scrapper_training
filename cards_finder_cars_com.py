@@ -110,44 +110,32 @@ def main():
                     cur.execute("select last_insert_id() as ad_group_id;")
                     ad_group_id = cur.fetchone()[0]
 
-                    for card_url in card_url_list:
-                        cur.execute(
-                            f"""
-                                insert into ads(source_id, card_url)
-                                with cte_new_card
-                                as
-                                ( 
-                                    select '{card_url[len(SOURCE_ID):]}' as card_url
-                                )
-                                select '{SOURCE_ID}' as source_id, 
-                                       card_url
-                                from cte_new_card
-                                where card_url not in (select card_url from ads where source_id='{SOURCE_ID}');
-                            """
-                        )
+                    cur.execute(
+                        f"""
+                            insert into ads(source_id, card_url)
+                            with cte_new_card (source_id, card_url)
+                            as
+                            (
+                                {' union '.join([f" select '{SOURCE_ID}' as source_id, '{card_url[len(SOURCE_ID):]}' as card_url" for card_url in card_url_list])}
+                            )
+                            select source_id, card_url from cte_new_card
+                            where card_url not in (select card_url from ads where source_id='{SOURCE_ID}');
+                        """
+                    )
 
-                        if cur.rowcount == 0:
-                            continue
+                    if cur.rowcount == 0:
+                        continue
 
-                        num_ads_inserted += cur.rowcount
+                    num_ads_inserted += cur.rowcount
+                    first_inserted_row_id = cur.lastrowid
 
-                        # make more detailed copy of the record in ads_archive table. link it with ads using ads_id
-                        cur.execute(
-                            f"""
-                                insert into ads_archive(ads_id, source_id, card_url, ad_group_id, process_log_id)
-                                with cte_new_card
-                                as
-                                ( 
-                                    select '{card_url[len(SOURCE_ID):]}' as card_url
-                                )
-                                select last_insert_id() as ads_id,
-                                       '{SOURCE_ID}' as source_id, 
-                                       card_url,
-                                       {ad_group_id} as ad_group_id, 
-                                       {process_log_id} as process_log_id
-                                from cte_new_card;
-                            """
-                        )
+                    # make more detailed copy of the records in ads_archive table. link it with ads using ads_id
+                    cur.execute(
+                        f"""
+                            insert into ads_archive(ads_id, source_id, card_url, ad_group_id, process_log_id)
+                            values {','.join([f"('{first_inserted_row_id + index}', '{SOURCE_ID}', '{card_url[len(SOURCE_ID):]}', '{ad_group_id}', '{process_log_id}')" for index, card_url in enumerate(card_url_list)])};
+                        """
+                    )
 
                     print(f"\ntime: {time.strftime('%X', time.gmtime(time.time() - start_time))}, ads inserted: {num_ads_inserted}, combination #: {num_searches}, progress: {round(num_searches/num_combinations*100, 2):5}%, search url: {group_url}")
 
